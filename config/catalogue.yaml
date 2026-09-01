@@ -1,0 +1,282 @@
+# Error catalogue as config (piece 1).
+# Synced from the Confluence catalogue (v1) + the standardized extras.
+# Loaded and validated by src/error_dashboard/catalogue.py.
+#
+# flow_phase: client_data | method_selection | session_creation | authorization | hand_back | verify
+#             (null = network layer, no fixed funnel phase)
+# severity:   fatal | error
+
+errors:
+  # --- Phase 1: client-side data assembly ---
+  - code: guest_wallet_fetch_failed
+    flow_phase: client_data
+    severity: error
+    description: Guest wallet lookup (appc/guest_wallet) failed
+    cause: Buyer can't be identified
+  - code: guest_wallet_request_failed
+    flow_phase: client_data
+    severity: error
+    description: Underlying HTTP call for the guest wallet failed
+    cause: Network/broker error fetching the guest wallet
+  - code: product_fetch_failed
+    flow_phase: client_data
+    severity: error
+    description: SKU / pricing fetch (productv2) failed
+    cause: Checkout can't show the product
+  - code: gamification_fetch_failed
+    flow_phase: client_data
+    severity: error
+    description: Gamification / bonus stats failed to load
+    cause: Non-blocking, but bonus info may be missing
+  - code: payment_methods_fetch_failed
+    flow_phase: method_selection
+    severity: error
+    description: Available payment methods list failed to load
+    cause: Blocks method selection
+  - code: auth_credentials_missing
+    flow_phase: client_data
+    severity: error
+    description: Missing wallet address or auth token (ewt)
+    cause: Checkout can't proceed
+  - code: stored_card_probe_failed
+    flow_phase: client_data
+    severity: error
+    description: Stored-card probe (Adyen/PayPal/Amazon) failed
+    cause: Saved payment methods may not appear
+
+  # --- Phase 2: method selection (stored payments UI) ---
+  - code: stored_card_component_failed
+    flow_phase: method_selection
+    severity: error
+    description: Stored credit-card component error
+    cause: Saved card UI failed to load/mount
+  - code: recurring_card_disable_failed
+    flow_phase: method_selection
+    severity: error
+    description: Disabling the recurring credit card failed
+    cause: Couldn't turn off recurring billing
+  - code: paypal_unsupported_type
+    flow_phase: method_selection
+    severity: error
+    description: Unsupported PayPal type
+    cause: No config for the given PayPal type
+  - code: paypal_email_fetch_failed
+    flow_phase: method_selection
+    severity: error
+    description: Failed to fetch the saved PayPal email
+    cause: Saved PayPal email can't be shown
+  - code: paypal_logout_failed
+    flow_phase: method_selection
+    severity: error
+    description: PayPal logout (deactivate) failed
+    cause: Couldn't remove the saved PayPal
+  - code: amazon_pay_logout_failed
+    flow_phase: method_selection
+    severity: error
+    description: Amazon Pay logout failed
+    cause: Couldn't remove the saved Amazon Pay
+
+  # --- Phase 3: session creation ---
+  - code: session_creation_failed
+    flow_phase: session_creation
+    severity: error
+    description: Opening the payment session with the broker failed
+    cause: Payment can't start
+  - code: session_reopen_after_cvc_decline_failed
+    flow_phase: session_creation
+    severity: error
+    description: Session re-open after a CVC decline failed
+    cause: Retry after CVC decline can't proceed
+  - code: paypal_session_data_failed
+    flow_phase: session_creation
+    severity: error
+    description: PayPal session / transaction creation failed
+    cause: PayPal payment can't start
+  - code: paypal_billing_agreement_failed
+    flow_phase: session_creation
+    severity: error
+    description: PayPal billing-agreement / vault setup failed
+    cause: Card/PayPal can't be vaulted for future use
+  - code: billing_agreement_credentials_missing
+    flow_phase: session_creation
+    severity: fatal
+    description: Missing token or ewt for the billing agreement
+    cause: Billing agreement can't be created
+  - code: amazon_pay_init_failed
+    flow_phase: session_creation
+    severity: error
+    description: Amazon Pay SDK / session init failed
+    cause: Amazon Pay can't start
+  - code: adyen_config_failed
+    flow_phase: session_creation
+    severity: error
+    description: Adyen drop-in configuration failed
+    cause: Adyen UI can't initialize
+  - code: adyen_method_unavailable
+    flow_phase: session_creation
+    severity: error
+    description: Requested Adyen method not available for this context
+    cause: The chosen method can't be offered
+
+  # --- Phase 4: authorization ---
+  - code: adyen_3ds_result_failed
+    flow_phase: authorization
+    severity: fatal
+    description: Adyen 3DS result submission failed
+    cause: Authorization result can't be confirmed
+  - code: adyen_payment_failed
+    flow_phase: authorization
+    severity: error
+    description: Error during Adyen drop-in payment
+    cause: Payment authorization failed
+  - code: adyen_payment_submit_failed
+    flow_phase: authorization
+    severity: error
+    description: Error during Adyen payment submit (common-payment-logic)
+    cause: Payment authorization failed at submit
+  - code: adyen_cct_checkout_failed
+    flow_phase: authorization
+    severity: error
+    description: Adyen checkout error on the CCT flow
+    cause: CCT Adyen payment failed
+  - code: google_pay_mount_failed
+    flow_phase: authorization
+    severity: error
+    description: Google Pay button / component failed to mount
+    cause: Google Pay can't be offered
+  - code: google_pay_authorization_failed
+    flow_phase: authorization
+    severity: error
+    description: Error during Google Pay authorization
+    cause: Payment via Google Pay failed (also fires on user cancel — see sampling)
+  - code: paypal_checkout_transaction_failed
+    flow_phase: authorization
+    severity: fatal
+    description: PayPal transaction POST / 3DS store failed
+    cause: PayPal authorization failed
+  - code: vk_pay_iframe_load_failed
+    flow_phase: authorization
+    severity: error
+    description: VK Pay iframe failed to load
+    cause: VK Pay can't be shown
+  - code: payment_url_open_failed
+    flow_phase: authorization
+    severity: error
+    description: Redirect / app URL failed to open
+    cause: User can't be sent to the payment page
+
+  # --- Phase 5/6: status polling & hand-back ---
+  - code: wallet_result_delivery_failed
+    flow_phase: hand_back
+    severity: fatal
+    description: Failed to deliver the result to the Android wallet host
+    cause: Wallet app doesn't learn the outcome
+  - code: wallet_missing_transaction_data
+    flow_phase: hand_back
+    severity: fatal
+    description: No transaction data when returning the wallet result
+    cause: Wallet result can't be sent
+  - code: sdk_result_delivery_failed
+    flow_phase: hand_back
+    severity: fatal
+    description: Failed to deliver the result to the SDK host
+    cause: SDK app doesn't learn the outcome
+  - code: sdk_websocket_missing
+    flow_phase: hand_back
+    severity: fatal
+    description: D2C WebSocket missing when returning the result
+    cause: Result can't be sent over the D2C channel
+  - code: sdk_deeplink_failed
+    flow_phase: hand_back
+    severity: fatal
+    description: Deep-link fallback failed
+    cause: Result can't be handed back via deep link
+  - code: ios_result_delivery_failed
+    flow_phase: hand_back
+    severity: error
+    description: Failed to post the result to the iOS WebKit bridge
+    cause: iOS app doesn't learn the outcome
+  - code: ios_deeplink_failed
+    flow_phase: hand_back
+    severity: error
+    description: iOS deeplink of the result failed
+    cause: iOS result can't be delivered via deep link
+  - code: ios_purchase_data_parse_failed
+    flow_phase: hand_back
+    severity: error
+    description: iOS failed to parse productv2Data verification data
+    cause: The iOS result can't be built
+  - code: ios_missing_purchase_data
+    flow_phase: hand_back
+    severity: fatal
+    description: iOS missing productv2Data or transactionData
+    cause: The iOS result can't be returned
+  - code: websocket_create_failed
+    flow_phase: hand_back
+    severity: error
+    description: D2C WebSocket could not be created
+    cause: Real-time result channel unavailable
+  - code: websocket_error
+    flow_phase: hand_back
+    severity: error
+    description: D2C WebSocket error
+    cause: Real-time result channel errored
+  - code: websocket_closed
+    flow_phase: hand_back
+    severity: error
+    description: D2C WebSocket closed
+    cause: Real-time result channel closed
+  - code: redirect_url_missing
+    flow_phase: hand_back
+    severity: error
+    description: Return page missing the stored redirect URL (e.g. Mi Pay)
+    cause: Can't resume after the redirect return
+
+  # --- Verification flow ---
+  - code: payment_method_verification_failed
+    flow_phase: verify
+    severity: error
+    description: Card / PayPal method verification failed
+    cause: Method can't be verified / saved
+  - code: credit_card_verification_failed
+    flow_phase: verify
+    severity: error
+    description: Credit-card verification failed
+    cause: Card can't be verified / saved
+  - code: payment_method_verification_error
+    flow_phase: verify
+    severity: error
+    description: Generic method verification error
+    cause: Verification flow errored
+  - code: credit_card_verify_failed
+    flow_phase: verify
+    severity: error
+    description: Adyen credit-card verify error
+    cause: Card verification failed
+  - code: paypal_verify_global_failed
+    flow_phase: verify
+    severity: error
+    description: Global PayPal verify error
+    cause: PayPal verification failed (global handler)
+  - code: paypal_verify_local_failed
+    flow_phase: verify
+    severity: error
+    description: Local PayPal verify error
+    cause: PayPal verification failed (local handler)
+
+  # --- Network layer (no fixed funnel phase) ---
+  - code: payment_transaction_failed
+    flow_phase: null
+    severity: fatal
+    description: Broker transaction POST failed
+    cause: Session / transaction not created
+  - code: api_request_failed
+    flow_phase: null
+    severity: error
+    description: Low-level HTTP request failed (network throw)
+    cause: Underlying request to a service failed
+  - code: api_response_not_ok
+    flow_phase: null
+    severity: error
+    description: HTTP responded with a non-OK status (see http_status_code tag)
+    cause: Service returned an error status

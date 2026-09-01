@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# Streamlit
+.streamlit/secrets.toml
+# macOS
+.DS_Store
+# Scratch / removed code
+_to_delete/
+# Env variants
+.env.*
+!.env.example
