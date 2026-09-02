@@ -6,10 +6,26 @@ return the raw `data` payload; shaping it into DataFrames happens in queries.py.
 """
 #sentry alawys returns a 200 OK with a JSON body, even for errors. So we call `raise_for_status()`
 from error_dashboard.settings import settings
-from error_dashboard.utils import sentry_get
+from error_dashboard.utils import period_to_range, sentry_get
 
 # Base URL for the org-scoped endpoints.
 _BASE = f"{settings.sentry_base_url}/api/0/organizations/{settings.sentry_org}"
+
+# Base URL for the project-scoped endpoints (individual events live here — this
+# is NOT the Discover events table, so it doesn't need Discover access).
+_PROJECT_BASE = (
+    f"{settings.sentry_base_url}/api/0/projects/"
+    f"{settings.sentry_org}/{settings.sentry_project}"
+)
+
+# Base URL for the issue-scoped endpoints. An "issue" is Sentry's grouped error
+# (what the Sentry UI shows as one entry); its tag summary and its event list
+# hang off this URL. Also outside Discover, so this token can read them.
+_ISSUE_BASE = f"{settings.sentry_base_url}/api/0/issues"
+
+# Default page sizes for the issue endpoints.
+ISSUE_SEARCH_LIMIT = 25
+ISSUE_EVENTS_LIMIT = 25
 
 
 def _headers() -> dict:
@@ -60,6 +76,37 @@ def fetch_tag_values(tag: str, environment: str, period: str) -> list[dict]:
         period=period,
     )
     return resp.json()
+
+
+def fetch_project_events(
+    query: str, environment: str, period: str, limit: int = 50
+) -> list[dict]:
+    """List individual events for the project (most recent first).
+
+    Hits /projects/{org}/{project}/events/ — the project event stream, not the
+    Discover events table — so each event comes back with its full `tags` array
+    ([{"key": ..., "value": ...}, ...]). Returns the raw list of event dicts;
+    shaping and any redaction happen in queries.py.
+    """
+    params = {
+        "query": query,
+        "environment": environment,
+        "statsPeriod": period,
+        "full": "true",           # include the tags array on each event
+        "per_page": limit,
+    }
+    resp = sentry_get(
+        f"{_PROJECT_BASE}/events/",
+        params,
+        _headers(),
+        "sentry.project_events",
+        query=query,
+        environment=environment,
+        period=period,
+    )
+    data = resp.json()
+    # This endpoint returns a bare JSON array; be tolerant of a wrapped shape too.
+    return data if isinstance(data, list) else data.get("data", [])
 
 
 def fetch_events_stats(
@@ -126,3 +173,112 @@ def fetch_top_series(
         top=top,
     )
     return resp.json()
+
+
+def fetch_project_issues(
+    query: str,
+    environment: str,
+    period: str,
+    limit: int = ISSUE_SEARCH_LIMIT,
+    sort: str = "freq",
+) -> list[dict]:
+    """Search the project's issues — Sentry's grouped errors — most frequent first.
+
+    /projects/{org}/{project}/issues/ speaks the same search language as the rest
+    of the dashboard (`error_title:"x"`, `!has:flow_phase`, …), which the project
+    *event* stream does not: there `query` is only a message substring match, so
+    a tag query silently returns nothing. This is therefore the way to go from a
+    query to the issue(s) behind it — and it needs no Discover access.
+
+    Its statsPeriod only accepts '' / '24h' / '14d', so the window is sent as an
+    explicit start/end pair (see utils.period_to_range).
+    """
+    start, end = period_to_range(period)
+    params = {
+        "query": query,
+        "environment": environment,
+        "start": start,
+        "end": end,
+        "limit": limit,
+        "sort": sort,                 # "freq" = biggest issue first
+    }
+    resp = sentry_get(
+        f"{_PROJECT_BASE}/issues/",
+        params,
+        _headers(),
+        "sentry.project_issues",
+        query=query,
+        environment=environment,
+        period=period,
+    )
+    data = resp.json()
+    return data if isinstance(data, list) else data.get("data", [])
+
+
+def fetch_issue_tags(
+    issue_id: str, environment: str, keys: list[str] | None = None
+) -> list[dict]:
+    """Tag summary for one issue: each tag it carries plus its top values.
+
+    Returns one dict per tag — {"key", "totalValues", "topValues": [...]}. Only a
+    few topValues come back per tag (self-hosted caps it at 3), so the full list
+    of a single tag comes from fetch_issue_tag_values(). Pass `keys` to ask for
+    specific tags only.
+    """
+    params: dict = {"environment": environment}
+    if keys:
+        params["key"] = keys          # httpx repeats it: ?key=a&key=b
+    resp = sentry_get(
+        f"{_ISSUE_BASE}/{issue_id}/tags/",
+        params,
+        _headers(),
+        "sentry.issue_tags",
+        issue_id=issue_id,
+        environment=environment,
+    )
+    data = resp.json()
+    return data if isinstance(data, list) else data.get("data", [])
+
+
+def fetch_issue_tag_values(issue_id: str, key: str, environment: str) -> list[dict]:
+    """Every recorded value of one tag on one issue, with its count.
+
+    Rows look like {"value": "adyen", "count": 12, "firstSeen": ..., "lastSeen": ...}
+    and come back unsorted, so the caller orders them.
+    """
+    params = {"environment": environment}
+    resp = sentry_get(
+        f"{_ISSUE_BASE}/{issue_id}/tags/{key}/values/",
+        params,
+        _headers(),
+        "sentry.issue_tag_values",
+        issue_id=issue_id,
+        key=key,
+        environment=environment,
+    )
+    data = resp.json()
+    return data if isinstance(data, list) else data.get("data", [])
+
+
+def fetch_issue_events(
+    issue_id: str, environment: str, limit: int = ISSUE_EVENTS_LIMIT
+) -> list[dict]:
+    """Recent individual events of one issue (most recent first), tags included.
+
+    Each event carries its full `tags` array, which is what makes the per-event
+    tag view possible. Redaction happens in queries.py, not here.
+
+    Page size goes in `per_page` — this endpoint ignores `limit` (unlike
+    /issues/, which only understands `limit`).
+    """
+    params = {"environment": environment, "per_page": limit}
+    resp = sentry_get(
+        f"{_ISSUE_BASE}/{issue_id}/events/",
+        params,
+        _headers(),
+        "sentry.issue_events",
+        issue_id=issue_id,
+        environment=environment,
+    )
+    data = resp.json()
+    return data if isinstance(data, list) else data.get("data", [])

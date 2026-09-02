@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     sentry_project: str = "4"
     sentry_token: str  # required — comes from SENTRY_TOKEN in .env / env
 
+    # Optional — only needed for the LLM insights layer. Left None so the app
+    # runs fine without it; the Insights panel then shows a "set the key" note
+    # instead of failing.
+    anthropic_api_key: str | None = None
+
 
 # A single, shared settings instance the rest of the app imports.
 settings = Settings()

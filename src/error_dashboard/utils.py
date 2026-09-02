@@ -6,6 +6,7 @@ Sentry with a retry, a circuit breaker, and 429 (rate-limit) handling.
 """
 
 import time
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import structlog
@@ -37,6 +38,9 @@ CACHE_TTL_SECONDS = 300
 MINUTES_PER_HOUR = 60
 HOURS_PER_DAY = 24
 DAYS_PER_WEEK = 7
+
+# Timestamp format Sentry accepts for an explicit start/end window (UTC).
+ISO_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 # Bucket size auto-picked per period, so the chart always stays readable.
 PERIOD_INTERVAL = {"7d": "1h", "30d": "1d", "90d": "1d"}
@@ -163,3 +167,15 @@ def auto_interval(period: str) -> str:
 def granularity_label(interval: str) -> str:
     """Human-readable name for a bucket interval, e.g. '1d' -> 'daily'."""
     return GRANULARITY_LABEL.get(interval, interval)
+
+
+def period_to_range(period: str) -> tuple[str, str]:
+    """Turn a period like '30d' into an explicit (start, end) UTC window.
+
+    Sentry's *issue* endpoints accept only statsPeriod '', '24h' or '14d', so the
+    dashboard's ranges (7d / 30d / 90d) have to be sent as a start/end pair
+    instead. Same window, expressed the way those endpoints understand.
+    """
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(minutes=period_to_minutes(period))
+    return start.strftime(ISO_FORMAT), end.strftime(ISO_FORMAT)

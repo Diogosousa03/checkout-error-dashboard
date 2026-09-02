@@ -11,6 +11,7 @@ dependencies = [
     "pydantic-settings",
     "structlog",
     "pyyaml",
+    "anthropic",
 ]
 
 # Managed with uv:  uv sync   /   uv run streamlit run src/error_dashboard/app.py
